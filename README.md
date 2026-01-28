@@ -6,6 +6,7 @@ Uses the YouTube API to edit your YouTube playlists. Especially for those with l
 
 **Requirements:**
 - [Python](https://www.python.org/downloads/) (Version 3.10 or higher)
+- A [clients_secrets.json file](OAUTH-INSTRUCTIONS.md)
 
 <h2> How to Install </h2>
 
