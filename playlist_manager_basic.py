@@ -4,6 +4,7 @@ import pickle
 import re
 from google_auth_oauthlib.flow import InstalledAppFlow
 from google.auth.transport.requests import Request  #google's request
+from google.auth.exceptions import RefreshError
 from googleapiclient.discovery import build
 
 # Authentication
@@ -17,27 +18,41 @@ def authenticate():
         with open('token.pickle', 'rb') as token:
             credentials = pickle.load(token)
 
+    
+    if credentials and credentials.valid:
+        return build('youtube', 'v3', credentials=credentials)
+
     # if there are no valid credentials avaliable, then either refresh the token or log in
-    if not credentials or not credentials.valid:
+    try:
         if credentials and credentials.expired and credentials.refresh_token:
             print("Refreshing Access Token...")
             credentials.refresh(Request())
         else:
+            raise RefreshError("No valid credentials")
+    
+    except RefreshError:
+            print("⚠ Stored credentials are invalid")
+            if os.path.exists("token.pickle"):
+                os.remove("token.pickle")
+
             print("Fetching New Tokens...")
             flow = InstalledAppFlow.from_client_secrets_file(
                 "client_secrets.json", scopes=["https://www.googleapis.com/auth/youtube"]
-                )
+            )
 
             # run local web server
             flow.run_local_server(port=8080, prompt="consent", authorization_prompt_message="")
 
             credentials = flow.credentials
 
+            #print(credentials.to_json())
+
             # save credentials for next run
             with open("token.pickle", "wb") as f:
                 print("Saving Credentials for Future Use")
                 pickle.dump(credentials, f)
 
+    #youtube = build('youtube', 'v3', credentials=credentials)
     return build('youtube', 'v3', credentials=credentials)
 
 def get_channel_id(youtube):
@@ -141,13 +156,22 @@ def move_item_binary(youtube, playlist_id, playlist_item_id, vid_id, start_pos, 
 
 youtube = authenticate()
 
+# manual input ver.
+# # insert link to playlist here
+# pl_link = ""
+# # insert video id here
+# vid_link = ""
+# # insert desired position in playlist here (int)
+# target_pos = 559
+
+# user input ver.
+#pl_link_pattern = re.compile(r'^https://www\.youtube\.com/playlist\?list=(\w+)$')
 pl_link_pattern = re.compile(r'(youtu\.be/|list=)([^#&?]+)') # regex from here: https://stackoverflow.com/questions/5288941/validating-youtube-playlist-url-using-regex
 vid_link_pattern = re.compile(r'^((?:https?:)?\/\/)?((?:www|m)\.)?((?:youtube(-nocookie)?\.com|youtu\.be))(\/(?:[\w\-]+\?v=|embed\/|live\/|shorts\/|v\/)?)([\w\-]{11})((?:\?|\&)\S+)?$') # regex from: https://stackoverflow.com/questions/19377262/regex-for-youtube-url
 
 print("––––––––––––––––––––––––––––––––––––––––––––––––")
 print("Welcome to YouTube Playlist Manger: Video Insert")
 
-print("================================================")
 pl_link = input("Enter playlist link: ")
 playlist_id = pl_link_pattern.search(pl_link)
 
@@ -180,6 +204,8 @@ except PermissionError:
         print("⚠ Playlist still not owned by this channel.")
         sys.exit()
 
+#playlist_id = "PLVG-j9x7s2lH9Izc7cskgnunpr8HSyCXE"
+
 print(f"You are now editing playlist <{playlist_id}>. Enter nothing to exit.")
 
 items = get_playlist_items(youtube, playlist_id)
@@ -188,6 +214,7 @@ print(f"*acquired playlist length: {playlist_length}*")
 
 while True: 
 
+    print("================================================")
     vid_link = input("Enter video link here: ")
 
     if vid_link == '':
@@ -233,6 +260,16 @@ while True:
 
         playlist_length+=1
 
+        #print(response)
+
+        # for dev to check if video claimed to be added was really added and to correct position
+        # vid_id = response["snippet"]["resourceId"]["videoId"]
+        # yt_link = f"https://youtu.be/{vid_id}"
+        # pos = response["snippet"]["position"]
+        # pl_id = response["snippet"]["playlistId"]
+        # pl_link = f"https://www.youtube.com/playlist?list={pl_id}"
+        # print(f"Added {yt_link} to position {pos} of the playlist {pl_link}")
+
     else:
 
         playlist_item_id = insert_at_end(youtube, playlist_id, vid_id)
@@ -249,3 +286,51 @@ while True:
         f"Inserted {yt_link} at position {target_pos+1} "
         f"in playlist {pl_link}"
     )
+
+    
+
+#STUFF TO ADD:
+
+# enter playlist link. enter nothing to exit / stop editing this playlist
+
+#find the position of a an already existing video --> so you can then quickly get the desired position of the new video
+
+#check if item already exists in playlist --> update position
+
+# need to figure out this method b/c if use method above for moving videos already in playlist, leaves a dupp
+# request = youtube.playlistItems().update(
+#     part="snippet",
+#     body={
+#         "id": "YOUR_PLAYLIST_ITEM_ID",
+#         "snippet": {
+#         "playlistId": "YOUR_PLAYLIST_ID",
+#         "position": 1,
+#         "resourceId": {
+#             "kind": "youtube#video",
+#             "videoId": "YOUR_VIDEO_ID"
+#         }
+#         }
+#     }
+# )
+
+# let users know that they have to input the position when unavaliable videos are shown
+# let users know what video they add (title) -- can get it from one of the response api calls
+
+
+#this is not working at all . 947 went to 915 like bruh wtf. nm works on smaller playlists. but that 1200+ vid giant it fails to work for
+#update: yay fixed
+
+
+# Current Playlist Selected: <insert link / playlist title>
+# [1] Select New Playlist
+# [2] Find Video Position Number
+# [3] Insert Video
+# [4] Update Video Position
+# [5] Delete Video / Playlist
+# [...] (view / list all videos, sort by duration, change playlist name)
+# [6] Log In / Switch Accounts <current user>
+# [7] Exit
+
+
+# [3]
+# --> video already exists. updating video --> calls [4]
